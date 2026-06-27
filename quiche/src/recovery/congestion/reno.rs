@@ -47,6 +47,7 @@ pub(crate) static RENO: CongestionControlOps = CongestionControlOps {
     congestion_event,
     checkpoint,
     rollback,
+    has_custom_pacing,
     #[cfg(feature = "qlog")]
     state_str,
     debug_fmt,
@@ -135,6 +136,8 @@ fn congestion_event(
         }
     }
 }
+
+fn has_custom_pacing() -> bool { false }
 
 fn checkpoint(_r: &mut Congestion) {}
 

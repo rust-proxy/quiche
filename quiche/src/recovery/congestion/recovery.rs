@@ -638,6 +638,7 @@ impl RecoveryOps for LegacyRecovery {
             sent_bytes,
             now,
             &mut pkt,
+            &self.rtt_stats,
             self.bytes_lost,
             in_flight,
         );
