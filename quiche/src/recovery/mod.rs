@@ -376,6 +376,8 @@ pub enum CongestionControlAlgorithm {
     Reno            = 0,
     /// CUBIC congestion control algorithm (default). `cubic` in a string form.
     CUBIC           = 1,
+    /// BBR congestion control algorithm. `bbr` in a string form.
+    BBR             = 2,
     /// BBRv2 congestion control algorithm implementation from gcongestion
     /// branch. `bbr2_gcongestion` in a string form.
     Bbr2Gcongestion = 4,
@@ -391,7 +393,7 @@ impl FromStr for CongestionControlAlgorithm {
         match name {
             "reno" => Ok(CongestionControlAlgorithm::Reno),
             "cubic" => Ok(CongestionControlAlgorithm::CUBIC),
-            "bbr" => Ok(CongestionControlAlgorithm::Bbr2Gcongestion),
+            "bbr" => Ok(CongestionControlAlgorithm::BBR),
             "bbr2" => Ok(CongestionControlAlgorithm::Bbr2Gcongestion),
             "bbr2_gcongestion" => Ok(CongestionControlAlgorithm::Bbr2Gcongestion),
             _ => Err(crate::Error::CongestionControl),
@@ -857,8 +859,8 @@ mod tests {
         assert!(!recovery_for_alg(algo).gcongestion_enabled());
 
         let algo = CongestionControlAlgorithm::from_str("bbr").unwrap();
-        assert_eq!(algo, CongestionControlAlgorithm::Bbr2Gcongestion);
-        assert!(recovery_for_alg(algo).gcongestion_enabled());
+        assert_eq!(algo, CongestionControlAlgorithm::BBR);
+        assert!(!recovery_for_alg(algo).gcongestion_enabled());
 
         let algo = CongestionControlAlgorithm::from_str("bbr2").unwrap();
         assert_eq!(algo, CongestionControlAlgorithm::Bbr2Gcongestion);

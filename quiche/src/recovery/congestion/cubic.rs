@@ -52,6 +52,7 @@ pub(crate) static CUBIC: CongestionControlOps = CongestionControlOps {
     congestion_event,
     checkpoint,
     rollback,
+    has_custom_pacing,
     #[cfg(feature = "qlog")]
     state_str,
     debug_fmt,
@@ -407,6 +408,8 @@ fn checkpoint(r: &mut Congestion) {
     r.cubic_state.prior.epoch_start = r.congestion_recovery_start_time;
     r.cubic_state.prior.lost_count = r.lost_count;
 }
+
+fn has_custom_pacing() -> bool { false }
 
 fn rollback(r: &mut Congestion) -> bool {
     // Don't go back to slow start.
