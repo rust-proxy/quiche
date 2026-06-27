@@ -114,6 +114,31 @@ impl PktInfo {
     }
 }
 
+// Absolute CLOCK_MONOTONIC nanoseconds for `t`, used as the SO_TXTIME cmsg value.
+//
+// Portable across pointer widths. Upstream transmuted `0u128` into an `Instant`
+// to obtain the monotonic-clock epoch, which only compiles where `Instant` is 16
+// bytes (64-bit). This variant correlates `Instant` with one real
+// `clock_gettime(CLOCK_MONOTONIC)` reading instead, so 32-bit targets build too.
+// (Local patch - see patches/tokio-quiche.)
+#[cfg(all(target_os = "linux", not(feature = "fuzzing")))]
+fn instant_to_monotonic_nanos(t: Instant) -> u64 {
+    use std::sync::OnceLock;
+    static BASE: OnceLock<(Instant, u64)> = OnceLock::new();
+    let (base_instant, base_nanos) = *BASE.get_or_init(|| {
+        let mut ts = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        // SAFETY: `clock_gettime` only writes into the timespec we pass in.
+        unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
+        let nanos = (ts.tv_sec as u64) * 1_000_000_000 + ts.tv_nsec as u64;
+        (Instant::now(), nanos)
+    });
+    base_nanos
+        .saturating_add(t.saturating_duration_since(base_instant).as_nanos() as u64)
+}
+
 #[cfg(all(target_os = "linux", not(feature = "fuzzing")))]
 #[allow(clippy::too_many_arguments)]
 pub async fn send_to(
@@ -121,18 +146,12 @@ pub async fn send_to(
     send_buf: &[u8], segment_size: usize, tx_time: Option<Instant>,
     would_block_metric: Counter, send_to_wouldblock_duration_s: TimeHistogram,
 ) -> io::Result<usize> {
-    // An instant with the value of zero, since [`Instant`] is backed by a version
-    // of timespec this allows to extract raw values from an [`Instant`]
-    const INSTANT_ZERO: Instant = unsafe { std::mem::transmute(0u128) };
-
     let mut sendmsg_retry_timer = None;
     loop {
         let iov = [std::io::IoSlice::new(send_buf)];
         let segment_size_u16 = segment_size as u16;
 
-        let raw_time = tx_time
-            .map(|t| t.duration_since(INSTANT_ZERO).as_nanos() as u64)
-            .unwrap_or(0);
+        let raw_time = tx_time.map(instant_to_monotonic_nanos).unwrap_or(0);
 
         let pkt_info = from.map(PktInfo::from_socket_addr);
 
