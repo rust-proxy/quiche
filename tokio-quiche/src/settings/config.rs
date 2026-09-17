@@ -245,7 +245,7 @@ fn quiche_config_with_tls(
     tls_cert: Option<TlsCertificatePaths>,
 ) -> QuicResult<quiche::Config> {
     let Some(tls) = tls_cert else {
-        return Ok(quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap());
+        return Ok(quiche::Config::new(quiche::PROTOCOL_VERSION)?);
     };
 
     match tls.kind {
@@ -301,8 +301,7 @@ fn quiche_config_with_tls(
             )?)
         },
         CertificateKind::X509 => {
-            let mut config =
-                quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
+            let mut config = quiche::Config::new(quiche::PROTOCOL_VERSION)?;
             config.load_cert_chain_from_pem_file(tls.cert)?;
             config.load_priv_key_from_pem_file(tls.private_key)?;
             Ok(config)
