@@ -130,12 +130,23 @@ fn make_quiche_config(
         .zip(params.tls_cert)
         .and_then(|(hook, tls)| hook.create_custom_ssl_context_builder(tls));
 
-    let mut config = if let Some(builder) = ssl_ctx_builder {
+    let mut config = if let Some(mut builder) = ssl_ctx_builder {
+        if let Some(hook) = &params.hooks.connection_hook {
+            hook.configure_ssl_context(&mut builder)?;
+        }
         quiche::Config::with_boring_ssl_ctx_builder(
             quiche::PROTOCOL_VERSION,
             builder,
         )?
     } else {
+        if params
+            .hooks
+            .connection_hook
+            .as_ref()
+            .is_some_and(|hook| hook.requires_custom_ssl_context())
+        {
+            return Err("required custom TLS context could not be created".into());
+        }
         quiche_config_with_tls(params.tls_cert)?
     };
 
