@@ -116,6 +116,32 @@ impl PktInfo {
     }
 }
 
+// Absolute CLOCK_MONOTONIC nanoseconds for `t`, used as the SO_TXTIME cmsg
+// value.
+//
+// Portable across pointer widths. Upstream transmuted `0u128` into an `Instant`
+// to obtain the monotonic-clock epoch, which only compiles where `Instant` is
+// 16 bytes (64-bit). This variant correlates `Instant` with one real
+// `clock_gettime(CLOCK_MONOTONIC)` reading instead, so 32-bit targets build
+// too. (Local patch - see patches/tokio-quiche.)
+#[cfg(all(target_os = "linux", not(feature = "fuzzing")))]
+fn instant_to_monotonic_nanos(t: Instant) -> u64 {
+    use std::sync::OnceLock;
+    static BASE: OnceLock<(Instant, u64)> = OnceLock::new();
+    let (base_instant, base_nanos) = *BASE.get_or_init(|| {
+        // SAFETY: an all-zero timespec is valid, including the private padding
+        // used by 32-bit musl with 64-bit time_t.
+        let mut ts: libc::timespec = unsafe { std::mem::zeroed() };
+        // SAFETY: `clock_gettime` only writes into the timespec we pass in.
+        unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
+        let nanos = (ts.tv_sec as u64) * 1_000_000_000 + ts.tv_nsec as u64;
+        (Instant::now(), nanos)
+    });
+    base_nanos.saturating_add(
+        t.saturating_duration_since(base_instant).as_nanos() as u64,
+    )
+}
+
 #[cfg(all(target_os = "linux", not(feature = "fuzzing")))]
 #[allow(clippy::too_many_arguments)]
 pub async fn send_to(
@@ -124,18 +150,12 @@ pub async fn send_to(
     dscp: Option<Dscp>, would_block_metric: Counter,
     send_to_wouldblock_duration_s: TimeHistogram,
 ) -> io::Result<usize> {
-    // SAFETY: This Linux-only code assumes `Instant` uses the same layout as a
-    // zero-valid timespec. The zero instant allows raw time extraction.
-    const INSTANT_ZERO: Instant = unsafe { std::mem::transmute(0u128) };
-
     let mut sendmsg_retry_timer = None;
     loop {
         let iov = [std::io::IoSlice::new(send_buf)];
         let segment_size_u16 = segment_size.map(|size| size as u16);
 
-        let raw_time = tx_time
-            .map(|t| t.duration_since(INSTANT_ZERO).as_nanos() as u64)
-            .unwrap_or(0);
+        let raw_time = tx_time.map(instant_to_monotonic_nanos).unwrap_or(0);
 
         let pkt_info = from.map(PktInfo::from_socket_addr);
         let tos = dscp.map(Dscp::tos);
@@ -432,28 +452,18 @@ pub(crate) mod test {
     }
 
     #[test]
-    /// If this test begins to fail, it means the implementation of [`Instant`]
-    /// has changed in the std library.
-    fn instant_zero() {
-        use std::time::Instant;
-
-        const INSTANT_ZERO: Instant = unsafe { std::mem::transmute(0u128) };
-        const NANOS_PER_SEC: u128 = 1_000_000_000;
-
-        // Define a [`Timespec`] similar to the one backing [`Instant`]
-        #[derive(Debug)]
-        struct Timespec {
-            tv_sec: i64,
-            tv_nsec: u32,
-        }
-
+    fn monotonic_conversion_preserves_pacing_interval() {
+        // Initialize the clock correlation before selecting the test instant.
+        instant_to_monotonic_nanos(Instant::now());
         let now = Instant::now();
-        let now_timespec: Timespec = unsafe { std::mem::transmute(now) };
+        let delay = Duration::from_millis(123);
+        let nanos = instant_to_monotonic_nanos(now);
 
-        let ref_elapsed = now.duration_since(INSTANT_ZERO).as_nanos();
-        let raw_elapsed = now_timespec.tv_sec as u128 * NANOS_PER_SEC +
-            now_timespec.tv_nsec as u128;
-
-        assert_eq!(ref_elapsed, raw_elapsed);
+        assert!(nanos > 0);
+        assert_eq!(instant_to_monotonic_nanos(now), nanos);
+        assert_eq!(
+            instant_to_monotonic_nanos(now + delay) - nanos,
+            delay.as_nanos() as u64
+        );
     }
 }

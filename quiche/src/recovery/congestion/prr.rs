@@ -73,9 +73,12 @@ impl PRR {
         self.snd_cnt = if pipe > ssthresh {
             // Proportional Rate Reduction.
             if self.recoverfs > 0 {
-                (self.prr_delivered * ssthresh)
-                    .div_ceil(self.recoverfs)
-                    .saturating_sub(self.prr_out)
+                // The product can exceed usize even when the resulting send
+                // allowance fits, notably for ordinary windows on 32-bit.
+                let allowance = (self.prr_delivered as u128 * ssthresh as u128)
+                    .div_ceil(self.recoverfs as u128)
+                    .saturating_sub(self.prr_out as u128);
+                allowance.min(usize::MAX as u128) as usize
             } else {
                 0
             }
@@ -98,6 +101,18 @@ impl PRR {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn proportional_allowance_does_not_overflow() {
+        let mut prr = PRR::default();
+        prr.congestion_event(1_000_000);
+        prr.on_packet_sent(1_000);
+        // The intermediate product is 50 billion, but the allowance fits in
+        // 32 bits. Check the proportional result rather than saturating the
+        // product before division.
+        prr.on_packet_acked(100_001, 900_000, 500_000, 1_200);
+        assert_eq!(prr.snd_cnt, 49_001);
+    }
 
     #[test]
     fn congestion_event() {

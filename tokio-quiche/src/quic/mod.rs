@@ -224,6 +224,10 @@ where
     #[cfg(not(feature = "custom-client-dcid"))]
     log::info!("created unestablished quiche::Connection"; "scid" => ?scid);
 
+    if let Some(hook) = &params.hooks.connection_hook {
+        hook.configure_client_ssl(quiche_conn.as_mut())?;
+    }
+
     if let Some(session) = &params.session {
         quiche_conn.set_session(session).map_err(|error| {
             log::error!("application provided an invalid session"; "error"=>?error);

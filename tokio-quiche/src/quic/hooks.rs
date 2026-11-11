@@ -25,12 +25,30 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use boring::ssl::SslContextBuilder;
+use boring::ssl::SslRef;
 
 use crate::quic::QuicheConnection;
 use crate::settings::TlsCertificatePaths;
 
 /// A set of hooks executed at the level of a [quiche::Connection].
 pub trait ConnectionHook {
+    /// Require a custom context instead of falling back to default TLS.
+    fn requires_custom_ssl_context(&self) -> bool {
+        false
+    }
+
+    /// Apply fallible TLS context options before any handshake can start.
+    fn configure_ssl_context(
+        &self, _builder: &mut SslContextBuilder,
+    ) -> crate::QuicResult<()> {
+        Ok(())
+    }
+
+    /// Configure a client's SSL object before its first ClientHello is sent.
+    fn configure_client_ssl(&self, _ssl: &mut SslRef) -> crate::QuicResult<()> {
+        Ok(())
+    }
+
     /// Constructs an optional [`SslContextBuilder`].
     ///
     /// This method allows full customization of quiche's SSL context, for

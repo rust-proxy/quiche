@@ -106,3 +106,13 @@ debug = true
 
 [profile.release]
 debug = true
+
+# Keep standalone manifests on local crates when testing this workspace.
+[patch.crates-io]
+datagram-socket = { path = "datagram-socket" }
+h3i = { path = "h3i" }
+octets = { path = "octets" }
+qlog = { path = "qlog" }
+quiche = { path = "quiche" }
+task-killswitch = { path = "task-killswitch" }
+tokio-quiche = { path = "tokio-quiche" }

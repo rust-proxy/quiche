@@ -24,6 +24,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
 use std::time::Instant;
 
 use self::recovery::Acked;
@@ -35,6 +36,8 @@ use crate::recovery::rtt::RttStats;
 use crate::recovery::CongestionControlAlgorithm;
 use crate::StartupExit;
 use crate::StartupExitReason;
+
+pub const PACING_MULTIPLIER: f64 = 1.25;
 
 pub struct SsThresh {
     // Current slow start threshold.  Defaults to usize::MAX which
@@ -89,12 +92,18 @@ pub struct Congestion {
     // HyStart++.
     pub(crate) hystart: hystart::Hystart,
 
+    // Pacing.
+    pub(crate) pacer: pacer::Pacer,
+
     // RFC6937 PRR.
     pub(crate) prr: prr::PRR,
 
     // The maximum size of a data aggregate scheduled and
     // transmitted together.
     send_quantum: usize,
+
+    // BBR state.
+    bbr_state: bbr::State,
 
     pub(crate) congestion_window: usize,
 
@@ -109,6 +118,8 @@ pub struct Congestion {
     pub(crate) app_limited: bool,
 
     pub(crate) delivery_rate: delivery_rate::Rate,
+
+    initial_rtt: Duration,
 
     /// Initial congestion window size in terms of packet count.
     pub(crate) initial_congestion_window_packets: usize,
@@ -162,10 +173,22 @@ impl Congestion {
 
             hystart: hystart::Hystart::new(recovery_config.hystart),
 
+            pacer: pacer::Pacer::new(
+                recovery_config.pacing,
+                initial_congestion_window,
+                0,
+                recovery_config.max_send_udp_payload_size,
+                recovery_config.max_pacing_rate,
+            ),
+
             prr: prr::PRR::default(),
+
+            bbr_state: bbr::State::new(),
 
             enable_cubic_idle_restart_fix: recovery_config
                 .enable_cubic_idle_restart_fix,
+
+            initial_rtt: recovery_config.initial_rtt,
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -191,6 +214,10 @@ impl Congestion {
         self.send_quantum
     }
 
+    pub(crate) fn set_pacing_rate(&mut self, rate: u64, now: Instant) {
+        self.pacer.update(self.send_quantum, rate, now);
+    }
+
     pub(crate) fn congestion_window(&self) -> usize {
         self.congestion_window
     }
@@ -202,7 +229,7 @@ impl Congestion {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_packet_sent(
         &mut self, bytes_in_flight: usize, sent_bytes: usize, now: Instant,
-        pkt: &mut Sent, bytes_lost: u64, in_flight: bool,
+        pkt: &mut Sent, rtt_stats: &RttStats, bytes_lost: u64, in_flight: bool,
     ) {
         if in_flight {
             self.update_app_limited(
@@ -221,11 +248,47 @@ impl Congestion {
             }
         }
 
-        pkt.time_sent = now;
+        // Pacing: Set the pacing rate if CC doesn't do its own.
+        if !(self.cc_ops.has_custom_pacing)() && rtt_stats.has_first_rtt_sample {
+            let rate = PACING_MULTIPLIER * self.congestion_window as f64 /
+                rtt_stats.smoothed_rtt.as_secs_f64();
+            self.set_pacing_rate(rate as u64, now);
+        }
+
+        self.schedule_next_packet(now, sent_bytes);
+
+        // LegacyRecovery releases Reno/CUBIC packets immediately. Do not
+        // charge their RTT samples for the restored BBR pacer's delay.
+        pkt.time_sent = if (self.cc_ops.has_custom_pacing)() {
+            self.get_packet_send_time()
+        } else {
+            now
+        };
 
         // bytes_in_flight is already updated. Use previous value.
         self.delivery_rate
             .on_packet_sent(pkt, bytes_in_flight, bytes_lost);
+    }
+
+    fn schedule_next_packet(&mut self, now: Instant, packet_size: usize) {
+        // Don't pace in any of these cases:
+        //   * Packet contains no data.
+        //   * The congestion window is within initcwnd.
+
+        let in_initcwnd = self.congestion_window <
+            self.max_datagram_size * self.initial_congestion_window_packets;
+
+        let sent_bytes = if !self.pacer.enabled() || in_initcwnd {
+            0
+        } else {
+            packet_size
+        };
+
+        self.pacer.send(sent_bytes, now);
+    }
+
+    pub(crate) fn get_packet_send_time(&self) -> Instant {
+        self.pacer.next_time()
     }
 
     pub(crate) fn on_packets_acked(
@@ -284,6 +347,8 @@ pub(crate) struct CongestionControlOps {
 
     pub rollback: fn(r: &mut Congestion) -> bool,
 
+    pub has_custom_pacing: fn() -> bool,
+
     #[cfg(feature = "qlog")]
     pub state_str: fn(r: &Congestion, now: Instant) -> &'static str,
 
@@ -313,6 +378,7 @@ static CONGESTION_WINDOW_UNCHECKED: CongestionControlOps = CongestionControlOps 
     },
     #[cfg(feature = "qlog")]
     state_str: |_, _| "congestion_window_unchecked",
+    has_custom_pacing: || false,
     debug_fmt: |_, _| Ok(()),
 };
 
@@ -330,6 +396,7 @@ impl From<CongestionControlAlgorithm> for &'static CongestionControlOps {
             // the gcongestion directory by Recovery::new_with_config;
             // LegacyRecovery never gets a RecoveryConfig with the
             // Bbr2Gcongestion algorithm.
+            CongestionControlAlgorithm::BBR => &bbr::BBR,
             CongestionControlAlgorithm::Bbr2Gcongestion => unreachable!(),
             #[cfg(feature = "congestion_window_unchecked_available")]
             CongestionControlAlgorithm::CongestionWindowUnchecked =>
@@ -455,9 +522,11 @@ mod tests {
     }
 }
 
+mod bbr;
 mod cubic;
 mod delivery_rate;
 mod hystart;
+pub(crate) mod pacer;
 mod prr;
 pub(crate) mod recovery;
 mod reno;

@@ -118,7 +118,6 @@ impl<T: PartialOrd + Copy> Minmax<T> {
     }
 
     /// Updates the max estimate based on the given measurement, and returns it.
-    #[cfg(test)]
     pub fn running_max(&mut self, win: Duration, time: Instant, meas: T) -> T {
         let val = MinmaxSample { time, value: meas };
 

@@ -59,16 +59,14 @@ pub fn recvmmsg(fd: BorrowedFd, bufs: &mut [ReadBuf<'_>]) -> io::Result<usize> {
         // Only take pointers into `iovecs` once it is fully populated, as
         // pushing to it would invalidate them.
         for (buf, iov) in bufs.iter().zip(iovecs.iter_mut()) {
+            // SAFETY: zero is valid for msghdr, including private padding
+            // on musl. Assign the populated iovec storage afterwards.
+            let mut msg_hdr: libc::msghdr = unsafe { std::mem::zeroed() };
+            msg_hdr.msg_iov = iov;
+            msg_hdr.msg_iovlen = 1;
+
             msgvec.push(libc::mmsghdr {
-                msg_hdr: libc::msghdr {
-                    msg_name: std::ptr::null_mut(),
-                    msg_namelen: 0,
-                    msg_iov: iov,
-                    msg_iovlen: 1,
-                    msg_control: std::ptr::null_mut(),
-                    msg_controllen: 0,
-                    msg_flags: 0,
-                },
+                msg_hdr,
                 msg_len: buf.capacity().try_into().unwrap(),
             });
         }
@@ -163,16 +161,14 @@ fn sendmmsg_impl(
         // ensures none of the pointers can be invalidated by a reallocation.
         let iovecs_per_message = if suffix.is_some() { 2 } else { 1 };
         for message_iovecs in iovecs.chunks_exact_mut(iovecs_per_message) {
+            // SAFETY: zero is valid for msghdr, including private padding
+            // on musl. Assign the populated iovec storage afterwards.
+            let mut msg_hdr: libc::msghdr = unsafe { std::mem::zeroed() };
+            msg_hdr.msg_iov = message_iovecs.as_mut_ptr();
+            msg_hdr.msg_iovlen = iovecs_per_message as _;
+
             msgvec.push(libc::mmsghdr {
-                msg_hdr: libc::msghdr {
-                    msg_name: std::ptr::null_mut(),
-                    msg_namelen: 0,
-                    msg_iov: message_iovecs.as_mut_ptr(),
-                    msg_iovlen: iovecs_per_message as _,
-                    msg_control: std::ptr::null_mut(),
-                    msg_controllen: 0,
-                    msg_flags: 0,
-                },
+                msg_hdr,
                 // Output field populated by the kernel.
                 msg_len: 0,
             });

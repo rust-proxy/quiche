@@ -1,22 +1,24 @@
 [package]
 name = "datagram-socket"
 version = "0.8.1"
-repository = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
-keywords = { workspace = true }
-categories = { workspace = true }
+repository = "https://github.com/cloudflare/quiche"
+edition = "2021"
+license = "BSD-2-Clause"
+keywords = ["quic", "http3"]
+categories = ["network-programming"]
 description = "Utilities for working with datagram sockets"
 
-[lints]
-workspace = true
+[lints.clippy]
+mem_forget = "deny"
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(capture_keylogs)", "cfg(test_invalid_len_compilation_fail)", "cfg(boring_v5)"] }
 
 [dependencies]
-bytes = { workspace = true }
-futures-util = { workspace = true }
-libc = { workspace = true }
-smallvec = { workspace = true }
-tokio = { workspace = true, features = ["net", "rt"] }
+bytes = { version = "1.11.1" }
+futures-util = { version = "0.3", default-features = false }
+libc = { version = ">=0.2.76, <0.2.190", default-features = false }
+smallvec = { version = "1.10", default-features = false }
+tokio = { version = "1.44", default-features = false, features = ["net", "rt"] }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.44", default-features = false, features = ["macros", "rt-multi-thread"] }

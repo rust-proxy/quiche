@@ -269,6 +269,12 @@ jobs:
       - name: Install cross
         run: cargo-binstall -y cross
 
+      - name: Test portable tokio-quiche pacing timestamps
+        run: >-
+          cross test --target=${{ matrix.target }} -p tokio-quiche --lib
+          --no-default-features --features quiche_internal
+          monotonic_conversion_preserves_pacing_interval
+
       - name: Run cargo test using cross
         # Docker 29.4.2 on ubuntu-26.04 makes socketcall(2) fail with ENOSYS,
         # and i386 glibc uses it for every socket call. Docker 29.4.3 reverted

@@ -131,12 +131,23 @@ fn make_quiche_config(
         .zip(params.tls_cert)
         .and_then(|(hook, tls)| hook.create_custom_ssl_context_builder(tls));
 
-    let mut config = if let Some(builder) = ssl_ctx_builder {
+    let mut config = if let Some(mut builder) = ssl_ctx_builder {
+        if let Some(hook) = &params.hooks.connection_hook {
+            hook.configure_ssl_context(&mut builder)?;
+        }
         quiche::Config::with_boring_ssl_ctx_builder(
             quiche::PROTOCOL_VERSION,
             builder,
         )?
     } else {
+        if params
+            .hooks
+            .connection_hook
+            .as_ref()
+            .is_some_and(|hook| hook.requires_custom_ssl_context())
+        {
+            return Err("required custom TLS context could not be created".into());
+        }
         quiche_config_with_tls(params.tls_cert)?
     };
 
@@ -190,6 +201,17 @@ fn make_quiche_config(
     config.discover_pmtu(quic_settings.discover_path_mtu);
     config.set_pmtud_max_probes(quic_settings.pmtud_max_probes);
     config.enable_hystart(quic_settings.enable_hystart);
+    config.set_enable_cubic_idle_restart_fix(
+        quic_settings.enable_cubic_idle_restart_fix,
+    );
+
+    // Custom BBR (gcongestion) tuning. `set_custom_bbr_params` is gated behind
+    // quiche's `internal` feature (our `quiche_internal`); when that feature is
+    // off the params are simply ignored so the crate still builds.
+    #[cfg(feature = "quiche_internal")]
+    if let Some(bbr_params) = quic_settings.custom_bbr_params.0 {
+        config.set_custom_bbr_params(bbr_params);
+    }
 
     config.enable_pacing(quic_settings.enable_pacing);
     if let Some(max_pacing_rate) = quic_settings.max_pacing_rate {
@@ -243,7 +265,7 @@ fn quiche_config_with_tls(
     tls_cert: Option<TlsCertificatePaths>,
 ) -> QuicResult<quiche::Config> {
     let Some(tls) = tls_cert else {
-        return Ok(quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap());
+        return Ok(quiche::Config::new(quiche::PROTOCOL_VERSION)?);
     };
 
     match tls.kind {
@@ -299,8 +321,7 @@ fn quiche_config_with_tls(
             )?)
         },
         CertificateKind::X509 => {
-            let mut config =
-                quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
+            let mut config = quiche::Config::new(quiche::PROTOCOL_VERSION)?;
             config.load_cert_chain_from_pem_file(tls.cert)?;
             config.load_priv_key_from_pem_file(tls.private_key)?;
             Ok(config)

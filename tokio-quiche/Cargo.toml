@@ -2,11 +2,11 @@
 name = "tokio-quiche"
 version = "0.23.0"
 description = "Asynchronous wrapper around quiche"
-repository = { workspace = true }
-edition = { workspace = true }
-license = { workspace = true }
+repository = "https://github.com/cloudflare/quiche"
+edition = "2021"
+license = "BSD-2-Clause"
 keywords = ["quic", "http3", "tokio"]
-categories = { workspace = true }
+categories = ["network-programming"]
 readme = "README.md"
 rust-version = "1.88"
 build = "build.rs"
@@ -71,61 +71,63 @@ qlog-zstd = ["qlog/zstd"]
 # imported in source code.
 ignored = ["boring-sys"]
 
-[lints]
-workspace = true
+[lints.clippy]
+mem_forget = "deny"
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(capture_keylogs)", "cfg(test_invalid_len_compilation_fail)", "cfg(boring_v5)"] }
 
 [dependencies]
-anyhow = { workspace = true }
-boring = { workspace = true }
-boring-sys = { workspace = true }
-bytes = { workspace = true }
-crossbeam = { workspace = true, default-features = false }
-debug_panic = { workspace = true }
-datagram-socket = { workspace = true }
-foundations = { workspace = true, default-features = false, features = [
+anyhow = { version = "1" }
+boring = { version = ">=4.19, <6" }
+boring-sys = { version = ">=4.19, <6" }
+bytes = { version = "1.11.1" }
+crossbeam = { version = "0.8.1", default-features = false }
+debug_panic = { version = "0.2.1" }
+datagram-socket = { version = "0.8.1" }
+foundations = { version = ">=4,<6", default-features = false, features = [
   "server-client-common-default",
 ] }
-futures = { workspace = true }
-futures-util = { workspace = true }
-hashlink = { workspace = true }
-ipnetwork = { workspace = true }
-log = { workspace = true }
-octets = { workspace = true }
-pin-project = { workspace = true }
-qlog = { workspace = true, features = ["foundations"] }
-quiche = { workspace = true, features = ["boringssl-boring-crate", "qlog"] }
-serde = { workspace = true, features = ["derive", "rc"] }
-serde_with = { workspace = true }
-slog-scope = { workspace = true }
-slog-stdlog = { workspace = true }
-smallvec = { workspace = true }
-task-killswitch = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt"] }
-tokio-stream = { workspace = true, features = ["net", "io-util"] }
-tokio-util = { workspace = true, features = [
+futures = { version = "0.3" }
+futures-util = { version = "0.3", default-features = false }
+hashlink = { version = "0.12.1" }
+ipnetwork = { version = "0.21" }
+log = { version = "0.4.20" }
+octets = { version = "0.3.7" }
+pin-project = { version = "1.0.12" }
+qlog = { version = "0.18.2", features = ["foundations"] }
+quiche = { version = "0.30.1", features = ["boringssl-boring-crate", "qlog"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_with = { version = "3", default-features = false }
+slog-scope = { version = "4.0" }
+slog-stdlog = { version = "4.1.1" }
+smallvec = { version = "1.10", default-features = false }
+task-killswitch = { version = "0.2.1" }
+thiserror = { version = "2" }
+tokio = { version = "1.44", default-features = false, features = ["macros", "rt"] }
+tokio-stream = { version = "0.1", features = ["net", "io-util"] }
+tokio-util = { version = "0.7.13", features = [
   "compat",
   "time",
   "codec",
   "io",
   "rt",
 ] }
-url = { workspace = true }
+url = { version = "2" }
 
 [dev-dependencies]
-assert_matches = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
-env_logger = { workspace = true }
-h3i = { workspace = true }
+assert_matches = { version = "1" }
+clap = { version = "4", features = ["derive"] }
+env_logger = { version = "0.11" }
+h3i = { version = "0.7", default-features = false }
 http = "1"
 http-body = "1"
 http-body-util = "0.1"
-regex = { workspace = true }
-rstest = { workspace = true }
-serde_json = { workspace = true }
+regex = { version = "1.4.2" }
+rstest = { version = "0.26.1" }
+serde_json = { version = "1" }
 tempfile = "3"
-tokio = { workspace = true, features = ["time", "test-util", "rt-multi-thread"] }
+tokio = { version = "1.44", default-features = false, features = ["time", "test-util", "rt-multi-thread"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-libc = { workspace = true }
-nix = { workspace = true, features = ["signal"] }
+libc = { version = ">=0.2.76, <0.2.190", default-features = false }
+nix = { version = "0.31.3", features = ["net", "uio", "socket", "signal"] }

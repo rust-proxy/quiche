@@ -2,13 +2,13 @@
 name = "quiche"
 version = "0.30.1"
 description = "🥧 Savoury implementation of the QUIC transport protocol and HTTP/3"
-repository = { workspace = true }
+repository = "https://github.com/cloudflare/quiche"
 authors = ["Alessandro Ghedini <alessandro@ghedini.me>"]
-edition = { workspace = true }
-license = { workspace = true }
-keywords = { workspace = true }
-categories = { workspace = true }
-readme = { workspace = true }
+edition = "2021"
+license = "BSD-2-Clause"
+keywords = ["quic", "http3"]
+categories = ["network-programming"]
+readme = "README.md"
 build = "src/build.rs"
 include = [
   "/*.md",
@@ -21,8 +21,10 @@ include = [
 ]
 rust-version = "1.88"
 
-[lints]
-workspace = true
+[lints.clippy]
+mem_forget = "deny"
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(capture_keylogs)", "cfg(test_invalid_len_compilation_fail)", "cfg(boring_v5)"] }
 
 [features]
 default = ["boringssl-boring-crate"]
@@ -100,24 +102,24 @@ rustdoc-args = ["--cfg", "docsrs"]
 cdylib-link-lines = { version = "0.1", optional = true }
 
 [dependencies]
-bytes = { workspace = true }
-boring = { workspace = true, optional = true }
-boring-sys = { workspace = true, optional = true }
-debug_panic = { workspace = true }
+bytes = { version = "1.11.1" }
+boring = { version = ">=4.19, <6", optional = true }
+boring-sys = { version = ">=4.19, <6", optional = true }
+debug_panic = { version = "0.2.1" }
 either = { version = "1.8", default-features = false }
 foreign-types-shared = { version = "0.3.0", optional = true }
 intrusive-collections = "0.10.3"
-libc = { workspace = true }
+libc = { version = ">=0.2.76, <0.2.190", default-features = false }
 libm = "0.2"
-log = { workspace = true, features = ["std"] }
-octets = { workspace = true, features = ["huffman_hpack"] }
-qlog = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+log = { version = "0.4.20", features = ["std"] }
+octets = { version = "0.3.7", features = ["huffman_hpack"] }
+qlog = { version = "0.18.2", optional = true }
+serde = { version = "1", optional = true }
 serde_json = { version = "1.0", optional = true }
-serde_with = { workspace = true, features = ["macros"], optional = true }
+serde_with = { version = "3", default-features = false, features = ["macros"], optional = true }
 sfv = { version = "0.9", optional = true }
 slab = "0.4"
-smallvec = { workspace = true, features = ["union"] }
+smallvec = { version = "1.10", default-features = false, features = ["union"] }
 enum_dispatch = "0.3"
 
 [target."cfg(windows)".dependencies]
@@ -127,10 +129,10 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [dev-dependencies]
-mio = { workspace = true, features = ["net", "os-poll"] }
-ring = { workspace = true }
-rstest = { workspace = true }
-url = { workspace = true }
+mio = { version = "1", features = ["net", "os-poll"] }
+ring = { version = "0.17.8" }
+rstest = { version = "0.26.1" }
+url = { version = "2" }
 
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
