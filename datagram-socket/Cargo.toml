@@ -16,7 +16,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ["cfg(capture_keylogs)", "cfg(te
 [dependencies]
 bytes = { version = "1.11.1" }
 futures-util = { version = "0.3", default-features = false }
-libc = { version = ">=0.2.76, <0.2.190", default-features = false }
+libc = { version = ">=0.2.76, <0.3", default-features = false }
 smallvec = { version = "1.10", default-features = false }
 tokio = { version = "1.44", default-features = false, features = ["net", "rt"] }
 

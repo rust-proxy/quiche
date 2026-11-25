@@ -71,9 +71,11 @@ futures-util = { version = "0.3", default-features = false }
 h3i = { version = "0.7", path = "./h3i", default-features = false }
 hashlink = { version = "0.12.1" }
 ipnetwork = { version = "0.21" }
-# Temporarily cap libc below 0.2.190, which breaks `backtrace` on iOS.
-# See https://github.com/rust-lang/libc/issues/5601.
-libc = { version = ">=0.2.76, <0.2.190", default-features = false }
+# libc 0.2.190 broke `backtrace` on iOS by restricting the Mach API to
+# macOS (https://github.com/rust-lang/libc/issues/5601). 0.2.191 restored
+# it, so the temporary `<0.2.190` cap can go; keep the 0.2.76 floor and cap
+# at the next incompatible minor.
+libc = { version = ">=0.2.76, <0.3", default-features = false }
 log = { version = "0.4.20" }
 mio = { version = "1" }
 nix = { version = "0.31.3", features = ["net", "uio", "socket"] }
